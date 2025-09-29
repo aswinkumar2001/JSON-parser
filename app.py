@@ -14,8 +14,8 @@ with st.sidebar:
     show_raw_json = st.checkbox("Show raw JSON structure", value=False)
     auto_select_all = st.checkbox("Auto-select all keys", value=False)
 
-# Allow user to upload the JSON file
-uploaded_file = st.file_uploader("Upload your JSON file", type=["json"], help="Upload a JSON file with a 'data' array containing the records to extract.")
+# Allow user to upload the JSON file# Allow user to upload the JSON file (replace the existing uploader line)
+uploaded_file = st.file_uploader("Upload your JSON file", type=["json", "txt"], help="Upload a JSON file or a text file containing JSON data.")
 
 if uploaded_file is not None:
     try:
@@ -158,7 +158,16 @@ if uploaded_file is not None:
                     else:
                         st.error("No data items found to extract.")
     except json.JSONDecodeError:
-        st.error("❌ Invalid JSON file. Please upload a valid JSON file.")
+        # Enhanced error message for TXT files
+        if uploaded_file.name.endswith('.txt'):
+            st.error("""
+            Invalid JSON in text file. Please check:
+            - The text file must contain valid JSON format
+            - Common issues: missing quotes, trailing commas, or incorrect brackets
+            - Try validating your JSON with an online validator
+            """)
+        else:
+            st.error("Invalid JSON file. Please upload a valid JSON.")
     except Exception as e:
         st.error(f"❌ An error occurred: {str(e)}")
 else:

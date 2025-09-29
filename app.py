@@ -157,6 +157,102 @@ if uploaded_file is not None:
                             )
                     else:
                         st.error("No data items found to extract.")
+
+                    # Duplicate Detection Section
+                    st.markdown("---")
+                    st.subheader("🔍 Duplicate Detection")
+                    
+                    # Let user choose which keys to check for duplicates
+                    duplicate_check_keys = st.multiselect(
+                        "Select keys to check for duplicates",
+                        options=selected_keys,
+                        default=[selected_keys[0]] if selected_keys else [],
+                        help="Select one or more keys to identify duplicate records. Duplicates will be found based on combinations of selected keys."
+                    )
+                    
+                    if duplicate_check_keys:
+                        # Create a combined key for duplicate checking
+                        if len(duplicate_check_keys) == 1:
+                            df['_combined_key'] = df[duplicate_check_keys[0]].astype(str)
+                        else:
+                            df['_combined_key'] = df[duplicate_check_keys].astype(str).agg(' - '.join, axis=1)
+                        
+                        # Find duplicates
+                        duplicate_mask = df.duplicated(subset=duplicate_check_keys, keep=False)
+                        duplicate_records = df[duplicate_mask]
+                        unique_duplicate_keys = duplicate_records['_combined_key'].unique()
+                        
+                        if len(duplicate_records) > 0:
+                            st.warning(f"Found {len(duplicate_records)} duplicate records based on {len(unique_duplicate_keys)} unique duplicate combinations")
+                            
+                            # Create tabs for different views
+                            tab1, tab2, tab3 = st.tabs([
+                                "📊 Duplicate Summary", 
+                                "👀 All Duplicate Entries", 
+                                "📥 Download Duplicates"
+                            ])
+                            
+                            with tab1:
+                                st.write("**Duplicate Combinations Summary:**")
+                                summary_df = duplicate_records.groupby('_combined_key').size().reset_index()
+                                summary_df.columns = ['Combined Key', 'Count']
+                                summary_df = summary_df.sort_values('Count', ascending=False)
+                                st.dataframe(summary_df, use_container_width=True)
+                                
+                                # Show one example per duplicate group
+                                st.write("**Sample from each duplicate group:**")
+                                sample_duplicates = duplicate_records.drop_duplicates(subset=duplicate_check_keys)
+                                st.dataframe(sample_duplicates[selected_keys], use_container_width=True)
+                            
+                            with tab2:
+                                st.write("**All duplicate entries:**")
+                                # Sort by the combined key for better organization
+                                duplicate_records_sorted = duplicate_records.sort_values('_combined_key')
+                                st.dataframe(duplicate_records_sorted[selected_keys], use_container_width=True)
+                                
+                                st.write(f"**Total duplicate records:** {len(duplicate_records)}")
+                                st.write(f"**Unique duplicate combinations:** {len(unique_duplicate_keys)}")
+                            
+                            with tab3:
+                                # Download duplicate records
+                                st.write("Download the duplicate records:")
+                                
+                                duplicate_excel = BytesIO()
+                                with pd.ExcelWriter(duplicate_excel, engine='xlsxwriter') as writer:
+                                    duplicate_records[selected_keys].to_excel(writer, index=False, sheet_name='Duplicate_Records')
+                                    
+                                    # Add summary sheet
+                                    summary_df = duplicate_records.groupby('_combined_key').size().reset_index()
+                                    summary_df.columns = ['Combined_Key', 'Duplicate_Count']
+                                    summary_df = summary_df.sort_values('Duplicate_Count', ascending=False)
+                                    summary_df.to_excel(writer, index=False, sheet_name='Duplicate_Summary')
+                                
+                                duplicate_excel.seek(0)
+                                
+                                st.download_button(
+                                    label="📥 Download Duplicate Report",
+                                    data=duplicate_excel,
+                                    file_name=f"duplicate_report_{timestamp}.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    help="Download Excel file with duplicate records and summary"
+                                )
+                                
+                                # Also offer CSV download for duplicates
+                                duplicate_csv = BytesIO()
+                                duplicate_records[selected_keys].to_csv(duplicate_csv, index=False)
+                                duplicate_csv.seek(0)
+                                
+                                st.download_button(
+                                    label="📥 Download Duplicates as CSV",
+                                    data=duplicate_csv,
+                                    file_name=f"duplicates_{timestamp}.csv",
+                                    mime="text/csv"
+                                )
+                        else:
+                            st.success("✅ No duplicates found based on the selected keys!")
+                        
+                        # Clean up temporary column
+                        df.drop('_combined_key', axis=1, inplace=True, errors='ignore')
     except json.JSONDecodeError:
         # Enhanced error message for TXT files
         if uploaded_file.name.endswith('.txt'):
